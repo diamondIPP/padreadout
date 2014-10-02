@@ -29,13 +29,16 @@ vector<Int_t> Get1stTriggerTime(Double_t trig_level,unsigned short chn_trg[],Int
       if(nTrigs == 1) first_trigger_time = i_on;
     }
   }
-  //cout<<"\nGet1stTriggerTime"<<endl;
-  //cout<<first_trigger_time<<" "<<nTrigs<<endl;
+  if (verbose){
+      cout<<"\nGet1stTriggerTime"<<endl;
+      cout<<first_trigger_time<<" "<<nTrigs<<endl;
+  }
   return vecTrigTimes;
 }
 
 void GetIntegrals(Int_t k,unsigned short sig[],Int_t trigTime,Int_t delay, Double_t *Integrals){
-    //cout<<k <<"Get Integral "<< trigTime<<" "<<delay<<endl;
+    if(verbose)
+        cout<<k <<"Get Integral "<< trigTime<<" "<<delay<<endl;
     Int_t pos = trigTime+delay;
     for(Int_t i = 0; i<4; i++) Integrals[i] = -1;
     if(trigTime<0 ||trigTime>=1024)
@@ -98,6 +101,13 @@ void SetBranches(){
   rec->Branch("nTrigs",&nTrigs,"nTrigs/I");
   rec->Branch("trigTime",&trigTime,"trigTime/I");
   rec->Branch("vTrigTimes",&vTrigTimes);
+  rec->Branch("vHitTimes",&vHitTimes);
+  rec->Branch("nHits",&nHits,"nHits/I");
+  rec->Branch("avrg_chn1",&avrg_chn1,"avrg_chn1/F");
+  rec->Branch("avrg_chn2",&avrg_chn2,"avrg_chn2/F");
+  rec->Branch("avrg_chn3",&avrg_chn3,"avrg_chn3/F");
+  rec->Branch("avrg_chn4",&avrg_chn4,"avrg_chn4/F");
+  rec->Branch("n_wf",&n_wf,"n_wf/I");
 }
 
 int GetNrecordedWaveforms(FILE* f){
@@ -128,9 +138,10 @@ int GetNrecordedWaveforms(FILE* f){
         }
         pos+=3;
     } 
-    if(n_wf >= 0 && n_wf <4)
+    if(n_wf >= 0 && n_wf <=4)
         break;
   }
+  rewind(f);
   return n_wf;
 }
 
@@ -178,17 +189,21 @@ void decode(TString filename) {
   TH1F* h_data = new TH1F("h_data","Integral50_{data}",1001,-500.5,500.5);
   TH1F* h_cali = new TH1F("h_cali","Integral50_{cali}",1001,-500.5,500.5);
 
-  int n_wf = GetNrecordedWaveforms(f);
+  n_wf = GetNrecordedWaveforms(f);
 
-  bool verbose = false;
   // find number of active channels
   cout<<"\rFound "<<n_wf<<" Waveforms in the file"<<endl;
   //cout<<"loop"<<endl;
   // loop over all events in data file
+  char hdr[] = {'E','H','D','R'};
+  outfile->mkdir("Graphs");
+  outfile->cd("Graphs");
   for (n=0 ; fread(&header, sizeof(header), 1, f) > 0; n++) {
     //  cout << "30" << endl;
     // decode time     
     if( n == 0 && verbose) 
+        cout << "event header  " << header.event_header << std::endl;
+    if (memcmp(header.event_header,hdr,4)!=0)
         cout << "event header  " << header.event_header << std::endl;
     if (n%1000 == 0) cout << "\r"<<n << std::flush;
 
@@ -207,32 +222,62 @@ void decode(TString filename) {
     }
 
     // print this info for every 10kth event
-    //if (n%10000 == 0) cout << "\t year "<< year << ": month " << month << ": day " << day << " : hour " << header.hour << " : minute " << header.minute << std::endl; 
+    if (n%10000 == 0) cout << "\t year "<< year << ": month " << month << ": day " << day << " : hour " << std::setfill(' ')<<std::setw(2)<<header.hour << " : minute " <<std::setfill(' ')<<std::setw(2)<< header.minute << std::flush;;
 
     // read the waveform
     Int_t s = sizeof(SingleWaveform_t);
-    //cout<<n <<" "<<s<<" "<<n_wf<<" "<<s*n_wf<<endl;
+    if (verbose && n == 1)
+        cout<<n <<" "<<s<<" "<<n_wf<<" "<<s*n_wf<<endl;
     float sizeofwaveform = fread(&waveform, n_wf*s, 1, f);
-    vector<Int_t> trigTimes = Get1stTriggerTime(-200,waveform.chn2,nTrigs);
-    if (false)
+    if (verbose && n == 1)
         cout << "sizeofwaveform: " << sizeofwaveform << std::endl;
+    vector<Int_t> trigTimes = Get1stTriggerTime(-100,waveform.chn2,nTrigs);
+    vector<Int_t>  hitTimes = Get1stTriggerTime(-100,waveform.chn4,nHits);
     
     // decode amplitudes in mV
     saturated = false;
     int n_min = 0;
+    int n_avrg = 30;
+    avrg_chn1 = 0;
+    avrg_chn2 = 0;
+    avrg_chn3 = 0;
+    avrg_chn4 = 0;
     for (Int_t i=0; i<1024; i++) {
       //chn3_int += (Double_t) ((waveform.chn3[i]) / 65535. - 0.5) * 1000;
       if (!saturated && (waveform.chn1[i] >= 65535 || waveform.chn1[i]==0))
           saturated = true;
       if (waveform.chn3[i]<30)
           n_min++;
-      if (n_min > 30 && saturated) 
+      if (i <n_avrg){
+          avrg_chn1 += waveform.chn1[i];
+          avrg_chn2 += waveform.chn2[i];
+          avrg_chn3 += waveform.chn3[i];
+          avrg_chn4 += waveform.chn4[i];
+      }
+      
+      if (n_min > 30 && saturated && i > n_avrg) 
           break;
     }
+    avrg_chn1 /= (Double_t)(n_avrg);
+    avrg_chn2 /= (Double_t)(n_avrg);
+    avrg_chn3 /= (Double_t)(n_avrg);
+    avrg_chn4 /= (Double_t)(n_avrg);
+    avrg_chn1 = (Double_t) (avrg_chn1 / 65535. - 0.5) * 1000;
+    avrg_chn2 = (Double_t) (avrg_chn2 / 65535. - 0.5) * 1000;
+    avrg_chn3 = (Double_t) (avrg_chn3 / 65535. - 0.5) * 1000;
+    avrg_chn4 = (Double_t) (avrg_chn4 / 65535. - 0.5) * 1000;
+
+
     calibflag = (n_min>10);
+
+    if (n == 1 && verbose)
+        cout<<"GetTrigTimes"<<flush;
     vTrigTimes.clear();
-    
-    for (int i =0;i < trigTimes.size();i++) vTrigTimes.push_back(i);
+    for (int i =0;i < trigTimes.size();i++) vTrigTimes.push_back(trigTimes.at(i));
+
+    vHitTimes.clear();
+    for (int i =0;i < hitTimes.size();i++) vHitTimes.push_back(hitTimes.at(i));
+
     if (nTrigs==0)
       trigTime = -1;
     else{
@@ -242,18 +287,26 @@ void decode(TString filename) {
       n_trig++;
     }
       
+    if (n == 1 && verbose)
+        cout<<"Add Waveforms"<<endl;
     if(calibflag){
-        if (n_delay_cali <100)
+        if (n_delay_cali <100){
           dt_cali.AddWaveform(waveform.chn1,1024);
+        }
     }
     else{
-      if (n_delay_data <100)
-        dt_data.AddWaveform(waveform.chn1,1024);
+      if (n_delay_data <100){
+            dt_data.AddWaveform(waveform.chn1,1024);
+      }
     }
 
     k++;
+    if (n == 0 && verbose)
+        cout<<"Find Trig delay"<<endl;
     //find Trigger Delay
     if(n_trig>50&&(n_delay_data<100||n_delay_cali<100)) {
+        if (n == 0 && verbose)
+            cout<<"Find Trig delay"<<endl;
         Float_t mean = (Float_t)trig_mean/(Float_t)n_trig;
         Float_t mean2 = (Float_t)trig_mean2/(Float_t)n_trig-mean*mean;
         Float_t sigma = mean2>=0?sqrt(mean2):-1;
@@ -269,8 +322,14 @@ void decode(TString filename) {
                     n_delay_data = 0;
                     delay_data = delay;
                 }
-                if (n_delay_data  == 100)
+                if (n_delay_data  == 100){
                     cout<<"\rFound final delay_data: "<<delay_data<<endl;
+                    if (delay_data<150 || delay_data > 200){
+                        delay_data = 167;
+                        cout<<"Invalid delay_data--> Fix to: "<<delay_data<<endl;
+                    }
+                        
+                }
             }
         }
         if (n_delay_cali<100){
@@ -288,7 +347,13 @@ void decode(TString filename) {
             }
         }
     }
+    if(trigTimes.size()==0){
+        if(verbose) cout<<"Cannot Find TrigTime" << endl;
+        continue;
+    }
     //Calculate Integrals
+    if (n == 0 && verbose)
+        cout<<"Find Integral"<<endl;
     if (calibflag){
         GetIntegrals(k,waveform.chn1,trigTimes[0],delay_cali,&Integrals[0]);
         h_cali->Fill(Integrals[0]);
@@ -299,23 +364,28 @@ void decode(TString filename) {
     }
 
     //Save waveforms
+    if (n == 0 && verbose)
+        cout<<"Save Graphs"<<endl;
     if ((n_saved_cali < 20 && calibflag && n_delay_cali==100) || (n_saved_data <= 20 && !calibflag && n_delay_data == 100)){
         for (Int_t i=0; i<1024; i++) {
             chn1[i] = (Double_t) ((waveform.chn1[i]) / 65535. - 0.5) * 1000;
             chn2[i] = (Double_t) ((waveform.chn2[i]) / 65535. - 0.5) * 1000;
+            chn3[i] = (Double_t) ((waveform.chn3[i]) / 65535. - 0.5) * 1000;
+            chn4[i] = (Double_t) ((waveform.chn4[i]) / 65535. - 0.5) * 1000;
             t[i] = (Double_t) header.time[i];
         }
         g_trig = new TGraph(1023,t,chn2);
+        g_hits = new TGraph(1023,t,chn4);
 
         if (calibflag){
             g_cali = new TGraph(1023,t,chn1);
-            g_cali->SetName(TString::Format("g_cali_%03",n_saved_cali));
+            g_cali->SetName(TString::Format("g_cali_%d03",n_saved_cali));
             g_cali->SetTitle(TString::Format("Calibration Event %06d",k));
             g_cali->Draw("goffAPL");
             g_cali->GetXaxis()->SetTitle("time");
             g_cali->GetYaxis()->SetTitle("signal / mV");
             g_cali->Write();
-            g_trig->SetName(TString::Format("g_cali_trig_%03",n_saved_cali));
+            g_trig->SetName(TString::Format("g_cali_trig_%d03",n_saved_cali));
             //cout<<"Saved Cali event "<<n_saved_cali<<"/"<<k<<" "<<g_cali->GetName()<<endl;
             n_saved_cali++;
             delete g_cali;
@@ -339,6 +409,13 @@ void decode(TString filename) {
         g_trig->GetYaxis()->SetTitle("signal_{ch2} / mV");
         g_trig->Write();
         delete g_trig;
+
+        g_hits->SetTitle(TString::Format("Hits Event %06d",k));
+        g_hits->Draw("goffAPL");
+        g_hits->GetXaxis()->SetTitle("time");
+        g_hits->GetYaxis()->SetTitle("signal_{ch4} / mV");
+        g_hits->Write();
+        delete g_hits;
     }
 
 
@@ -346,6 +423,7 @@ void decode(TString filename) {
 
         
   }
+  outfile->cd();
       
   // print number of events
   //  cout<<TString::Format("\r%4d/%4d \t%5.1f",ientry,nentries,(Float_t)ientry/(Float_t)(nentries)*100)<<flush;
@@ -355,17 +433,47 @@ void decode(TString filename) {
   // save and close root file
   outfile->cd();
   rec->Write();
-  TF1* f_data = new TF1("f_data","landau",-500,500);
-  h_data->Fit(f_data,"Q");
   TF1* f_cali = new TF1("f_cali","gaus",-500,500);
   h_cali->Fit(f_cali,"Q");
+  
+  TF1* f_data;
+  Float_t mean = h_data->GetMean();
+  Float_t sigma= h_data->GetRMS();
+  if (mean > 0)
+      f_data = new TF1("f_data","landau",0,500);
+  else{
+      f_data = new TF1("f_data","[0]*TMath::Landau(-x,[1],[2])",-500,0);
+      f_data->SetParLimits(1,-500,500);
+      f_data->SetParameter(1,-1*mean);
+      f_data->SetParLimits(2,0,500);
+      f_data->SetParameter(2,sigma);
+      f_data->SetParLimits(0,0,1e6);
+      f_data->SetParameter(0,h_data->GetEntries());
+
+  }
+  f_data->SetNpx(1000);
+  h_data->Fit(f_data,"Q");
+  TF1* f_data2= new TF1("f_data2","gaus",-500,500);
+  f_data2->SetNpx(1000);
+  f_data2->SetLineColor(kGreen);
+  Float_t mp = h_data->GetBinCenter(h_data->GetMaximumBin());
+  if ( abs((mean - mp)/mean - 1) > .3)
+      mp = mean;
+  h_data->Fit(f_data2,"Q+","",mp-sigma/2.,mp+sigma/2.);
   cout<<"RUN "<<filename<<":\n\tDATA: "<<f_data->GetParameter(1)<<"\n\tCALI: "<<f_cali->GetParameter(1)<<endl;
   h_data->Write();
   h_cali->Write();
   dt_cali.GetHisto()->Write();
   dt_data.GetHisto()->Write();
   outfile->Close();
-  results[(string)filename] = (string)TString::Format("DATA: %3.2f \tCALI: %3.2f +/- %3.2f",f_data->GetParameter(1),f_cali->GetParameter(1),f_cali->GetParameter(2));
+  results[(string)filename] = (string)TString::Format("%7d | %3d, %3d | DATA:+%7.2f | %7.2f +/- %7.2f \tCALI: %7.2f +/- %7.2f", n,
+                                                                                                                                delay_data,
+                                                                                                                                delay_cali,
+                                                                                                                                f_data->GetParameter(1),
+                                                                                                                                f_data2->GetParameter(1),
+                                                                                                                                f_data2->GetParameter(2),
+                                                                                                                                f_cali->GetParameter(1),
+                                                                                                                                f_cali->GetParameter(2));
   WriteTableFile("results.txt",&results);
 
   //cout << "this is the stopwatch at end\n===============" << std::endl;
@@ -382,6 +490,7 @@ void usage(){
 }
 
 int main(int argc, char* argv[]){
+   verbose = false;;
 
   TString infile;
   TString outfile;
