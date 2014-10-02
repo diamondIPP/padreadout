@@ -29,7 +29,7 @@ all: decode
 	$ @echo "SOURCES $(SOURCES)"
 	$ @echo "OBJECTS $(OBJECTS)"
 
-decode: $(OBJECTS)
+decode:  $(OBJECTS)
 	$ @echo "SOURCES $(SOURCES)"
 	$ @echo "OBJECTS $(OBJECTS)"
 	$ @echo "@       $@"
@@ -37,10 +37,14 @@ decode: $(OBJECTS)
 	$ @echo "^       $^"
 	$(CC) $(LDFLAGS) -o $@ $^  $(LIBS)
 
+$(OBJECTS): | $(OBJDIR)
 
+$(OBJDIR):
+	    mkdir -p $(OBJDIR)
 
 
 $(ODIR)/%.o:  $(SDIR)/%.cc $(IDIR)/%.hh
+	mkdir -p $(ODIR)
 	$ #$ @echo "CREATING OBJECT $%
 	$ $(CC) -c $(INC) -o $@  $(CXXFLAGS) -c $< 
 	#$ $(CC) -c $(INC) -o $@ $< $(CFLAGS)
