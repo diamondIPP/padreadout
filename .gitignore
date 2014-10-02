@@ -26,3 +26,9 @@
 *.exe
 *.out
 *.app
+decode
+
+#
+data/input
+data/output
+data/results.txt

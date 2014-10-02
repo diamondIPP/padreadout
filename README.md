@@ -1,4 +1,3 @@
-padreadout
-==========
-
-First step of pad analysis to create root tree
+testbeam
+========
+Scripts to analyse the PSI test beam data for pad detectors
