@@ -16,6 +16,11 @@ all: analysis
 
 analysis: $(OBJECTS) $(ANALYSIS)
 
+$(OBJECTS): |$(OUTPUT)
+
+$(OUTPUT):
+	mkdir -p $(OUTPUT)
+
 $(OUTPUT)/%.root:  $(INPUT)/%.dat $(ANALYSIS)
 	$(ANALYSIS) -i $< 
 	$(MV) $(patsubst $(OUTPUT)/%.root, $(INPUT)/%.root,$@) $@
