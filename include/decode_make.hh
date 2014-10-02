@@ -1,4 +1,5 @@
 #include <string.h>
+#include <iomanip>      // std::setfill, std::setw
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
@@ -52,6 +53,7 @@ struct Waveform_t {
 };
 
 
+bool verbose;
 Header_t header;
 Waveform_t waveform;
 TTree *rec;
@@ -66,9 +68,13 @@ Int_t delay_cali = -2e3;
 Double_t Integrals[] = {-1,-1,-1,-1};
 Double_t *pIntegrals = &Integrals[0];
 Int_t nTrigs;
+Int_t nHits;
 Int_t trigTime;
 bool saturated;
 vector<Int_t> vTrigTimes;
+vector<Int_t> vHitTimes;
+Float_t avrg_chn1,avrg_chn2,avrg_chn3,avrg_chn4;
+int n_wf;
 int calibflag;
 
 
