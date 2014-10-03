@@ -164,7 +164,6 @@ void decode(TString filename) {
   //open the root file
   TFile *outfile = new TFile(filename+".root", "RECREATE");
   map<string,string> results;
-  ReadTableFile("results.txt",&results);
   
   rec= new TTree("rec","rec");
   SetBranches();
@@ -466,6 +465,7 @@ void decode(TString filename) {
   dt_cali.GetHisto()->Write();
   dt_data.GetHisto()->Write();
   outfile->Close();
+  ReadTableFile("results.txt",&results);
   results[(string)filename] = (string)TString::Format("%7d | %3d, %3d | DATA:+%7.2f | %7.2f +/- %7.2f \tCALI: %7.2f +/- %7.2f", n,
                                                                                                                                 delay_data,
                                                                                                                                 delay_cali,
