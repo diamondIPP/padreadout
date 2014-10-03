@@ -1,7 +1,7 @@
 ## makefile for decode.C
 ANALYSIS	:= ../decode
 INPUT		:= input
-OUTPUT		:= output
+OUTPUT		:= /scratch/PLT/pad_out/
 SOURCES     := $(wildcard input/run_2014*.dat)
 OBJECTS     := $(patsubst $(INPUT)/%.dat,$(OUTPUT)/%.root,$(SOURCES))
 
