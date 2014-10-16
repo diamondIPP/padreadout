@@ -1,5 +1,6 @@
 #include "decode_make.hh"
 #define fopen64 fopen
+#define DEFAULT_TRIGTIME 245
 
 vector<Int_t> Get1stTriggerTime(Double_t trig_level,unsigned short chn_trg[],Int_t &nTrigs) {
   unsigned short trigger_level = (trig_level/1000+.5)*65535;
@@ -39,38 +40,41 @@ vector<Int_t> Get1stTriggerTime(Double_t trig_level,unsigned short chn_trg[],Int
 void GetIntegrals(Int_t k,unsigned short sig[],Int_t trigTime,Int_t delay, Double_t *Integrals){
     if(verbose)
         cout<<k <<"Get Integral "<< trigTime<<" "<<delay<<endl;
-    Int_t pos = trigTime+delay;
     for(Int_t i = 0; i<4; i++) Integrals[i] = -1;
     if(trigTime<0 ||trigTime>=1024)
         return;
-    if (delay == -2e3) return;
+    if (delay == -2e3) delay = 0;
+    Int_t pos = trigTime+delay;
+//return;
     Int_t integral = 0;
     if (pos<0 || 1024 <= pos)
         return;
 
     integral += sig[pos];
+    int n = 0;
     for (Int_t i = 1; i<= 200; i++){
         if (pos+i>=1024)
-            return;
+            continue;
         if (pos-i<0)
-            return;
+            continue;
+        n +=2;
         integral += sig[pos+i];
         integral += sig[pos-i];
         switch (i){
             case 25:
-                Integrals[0] = integral/51.;
+                Integrals[0] = integral/(Double_t)(n+1);
                 Integrals[0] = (Double_t) (Integrals[0] / 65535. - 0.5) * 1000;
                 break;
             case 50:
-                Integrals[1] = integral/101.;
+                Integrals[1] = integral/(Double_t)(n+1);
                 Integrals[1] = (Double_t) (Integrals[1] / 65535. - 0.5) * 1000;
                 break;
             case 100:
-                Integrals[2] = integral/201.;
+                Integrals[2] = integral/(Double_t)(n+1);
                 Integrals[2] = (Double_t) (Integrals[2] / 65535. - 0.5) * 1000;
                 break;
             case 200:
-                Integrals[3] = integral/401.;
+                Integrals[3] = integral/(Double_t)(n+1);
                 Integrals[3] = (Double_t) (Integrals[3] / 65535. - 0.5) * 1000;
                 break;
         }
@@ -170,6 +174,8 @@ void decode(TString filename) {
 //  rec->Branch("chn3", &chn3 ,"chn3[1024]/D");
 //  rec->Branch("chn4", &chn4 ,"chn4[1024]/D");
   //  cout << "21" << endl;
+//  TriggerDelay dt_data(16,"DATA");
+//  TriggerDelay dt_cali(1,"CALI");
   TriggerDelay dt_data(128,"DATA");
   TriggerDelay dt_cali(16,"CALI");
   Int_t trig_mean = 0;
@@ -177,6 +183,10 @@ void decode(TString filename) {
   Int_t n_trig = 0;
   Int_t n_delay_cali = 0;
   Int_t n_delay_data = 0;
+  if(delay_data != -2e3)
+    n_delay_data = 100;
+  if(delay_cali != -2e3)
+    n_delay_cali = 100;
   Int_t n_saved_data = 0;
   Int_t n_saved_cali = 0;
   TGraph* g_data = 0;//new TGraph(1024);
@@ -323,8 +333,8 @@ void decode(TString filename) {
                 }
                 if (n_delay_data  == 100){
                     cout<<"\rFound final delay_data: "<<delay_data<<endl;
-                    if (delay_data<150 || delay_data > 200){
-                        delay_data = 167;
+                    if (delay_data<-50 || delay_data > 200){
+                        delay_data = -32;
                         cout<<"Invalid delay_data--> Fix to: "<<delay_data<<endl;
                     }
                         
@@ -348,7 +358,7 @@ void decode(TString filename) {
     }
     if(trigTimes.size()==0){
         if(verbose) cout<<"Cannot Find TrigTime" << endl;
-        continue;
+        trigTimes.push_back(DEFAULT_TRIGTIME);
     }
     //Calculate Integrals
     if (n == 0 && verbose)
@@ -385,6 +395,7 @@ void decode(TString filename) {
             g_cali->GetYaxis()->SetTitle("signal / mV");
             g_cali->Write();
             g_trig->SetName(TString::Format("g_cali_trig_%d03",n_saved_cali));
+            g_hits->SetName(TString::Format("g_cali_hits_%d03",n_saved_cali));
             //cout<<"Saved Cali event "<<n_saved_cali<<"/"<<k<<" "<<g_cali->GetName()<<endl;
             n_saved_cali++;
             delete g_cali;
@@ -398,6 +409,7 @@ void decode(TString filename) {
             g_data->GetYaxis()->SetTitle("signal_{ch1} / mV");
             g_data->Write();
             g_trig->SetName(TString::Format("g_data_trig_%03d",n_saved_data));
+            g_hits->SetName(TString::Format("g_data_hits_%03d",n_saved_data));
             //cout<<"Saved data event "<<n_saved_data<<"/"<<k<<" "<<g_data->GetName()<<endl;
             n_saved_data++;
             delete g_data;
@@ -417,7 +429,8 @@ void decode(TString filename) {
         delete g_hits;
     }
 
-
+    if (verbose)
+      cout<<n<<" Fill"<<endl;
     rec->Fill();
 
         
@@ -490,16 +503,20 @@ void usage(){
 }
 
 int main(int argc, char* argv[]){
-   verbose = false;;
+   verbose = false;
 
   TString infile;
   TString outfile;
+  delay_data = -2e3;
+  delay_cali = -2e3;
   // Parse options
   char ch;
   while ((ch = getopt(argc, argv, "i:h")) != -1 ) {
     switch (ch) {
       case 'i': infile  = TString(optarg);  break;
       case 'h': usage(); break;
+      case 'd': delay_data = atoi(optarg);cout<<"Set delay_data to "<<delay_data<<endl;break;
+      case 'c': delay_cali = atoi(optarg);cout<<"Set delay_cali t0 "<<delay_cali<<endl;
       default:
       cerr << "*** Error: unknown option " << optarg << std::endl;
       usage();
