@@ -32,3 +32,5 @@ decode
 data/input
 data/output
 data/results.txt
+
+**/*~
