@@ -1,5 +1,6 @@
 #include "decode_make.hh"
 #define fopen64 fopen
+#define DEFAULT_TRIGTIME 245
 
 vector<Int_t> Get1stTriggerTime(Double_t trig_level,unsigned short chn_trg[],Int_t &nTrigs) {
   unsigned short trigger_level = (trig_level/1000+.5)*65535;
@@ -39,38 +40,41 @@ vector<Int_t> Get1stTriggerTime(Double_t trig_level,unsigned short chn_trg[],Int
 void GetIntegrals(Int_t k,unsigned short sig[],Int_t trigTime,Int_t delay, Double_t *Integrals){
     if(verbose)
         cout<<k <<"Get Integral "<< trigTime<<" "<<delay<<endl;
-    Int_t pos = trigTime+delay;
     for(Int_t i = 0; i<4; i++) Integrals[i] = -1;
     if(trigTime<0 ||trigTime>=1024)
         return;
-    if (delay == -2e3) return;
+    if (delay == -2e3) delay = 0;
+    Int_t pos = trigTime+delay;
+//return;
     Int_t integral = 0;
     if (pos<0 || 1024 <= pos)
         return;
 
     integral += sig[pos];
+    int n = 0;
     for (Int_t i = 1; i<= 200; i++){
         if (pos+i>=1024)
-            return;
+            continue;
         if (pos-i<0)
-            return;
+            continue;
+        n +=2;
         integral += sig[pos+i];
         integral += sig[pos-i];
         switch (i){
             case 25:
-                Integrals[0] = integral/51.;
+                Integrals[0] = integral/(Double_t)(n+1);
                 Integrals[0] = (Double_t) (Integrals[0] / 65535. - 0.5) * 1000;
                 break;
             case 50:
-                Integrals[1] = integral/101.;
+                Integrals[1] = integral/(Double_t)(n+1);
                 Integrals[1] = (Double_t) (Integrals[1] / 65535. - 0.5) * 1000;
                 break;
             case 100:
-                Integrals[2] = integral/201.;
+                Integrals[2] = integral/(Double_t)(n+1);
                 Integrals[2] = (Double_t) (Integrals[2] / 65535. - 0.5) * 1000;
                 break;
             case 200:
-                Integrals[3] = integral/401.;
+                Integrals[3] = integral/(Double_t)(n+1);
                 Integrals[3] = (Double_t) (Integrals[3] / 65535. - 0.5) * 1000;
                 break;
         }
@@ -84,6 +88,7 @@ void SetBranches(){
   rec->Branch("month", &month ,"month/I");
   rec->Branch("day", &day ,"day/I");
   rec->Branch("time_stamp", &time_stamp ,"time_stamp/D");
+  rec->Branch("timestamp",&timestamp, "timestamp/D");
   //rec->Branch("t", &t   ,"t[1024]/D");  
   rec->Branch("n", &k   ,"n/I");  
   // Create branches for the channels
@@ -103,10 +108,18 @@ void SetBranches(){
   rec->Branch("vTrigTimes",&vTrigTimes);
   rec->Branch("vHitTimes",&vHitTimes);
   rec->Branch("nHits",&nHits,"nHits/I");
-  rec->Branch("avrg_chn1",&avrg_chn1,"avrg_chn1/F");
-  rec->Branch("avrg_chn2",&avrg_chn2,"avrg_chn2/F");
-  rec->Branch("avrg_chn3",&avrg_chn3,"avrg_chn3/F");
-  rec->Branch("avrg_chn4",&avrg_chn4,"avrg_chn4/F");
+  rec->Branch("avrg_chn1", &avrg_chn1,"avrg_chn1/F");
+  rec->Branch("avrg_chn2", &avrg_chn2,"avrg_chn2/F");
+  rec->Branch("avrg_chn3", &avrg_chn3,"avrg_chn3/F");
+  rec->Branch("avrg_chn4", &avrg_chn4,"avrg_chn4/F");
+  rec->Branch("avrg_first_chn1", &avrg_first_chn1,"avrg_first_chn1/F");
+  rec->Branch("avrg_first_chn2", &avrg_first_chn2,"avrg_first_chn2/F");
+  rec->Branch("avrg_first_chn3", &avrg_first_chn3,"avrg_first_chn3/F");
+  rec->Branch("avrg_first_chn4", &avrg_first_chn4,"avrg_first_chn4/F");
+  rec->Branch("avrg_last_chn1", &avrg_last_chn1,"avrg_last_chn1/F");
+  rec->Branch("avrg_last_chn2", &avrg_last_chn2,"avrg_last_chn2/F");
+  rec->Branch("avrg_last_chn3", &avrg_last_chn3,"avrg_last_chn3/F");
+  rec->Branch("avrg_last_chn4", &avrg_last_chn4,"avrg_last_chn4/F");
   rec->Branch("n_wf",&n_wf,"n_wf/I");
 }
 
@@ -170,6 +183,8 @@ void decode(TString filename) {
 //  rec->Branch("chn3", &chn3 ,"chn3[1024]/D");
 //  rec->Branch("chn4", &chn4 ,"chn4[1024]/D");
   //  cout << "21" << endl;
+//  TriggerDelay dt_data(16,"DATA");
+//  TriggerDelay dt_cali(1,"CALI");
   TriggerDelay dt_data(128,"DATA");
   TriggerDelay dt_cali(16,"CALI");
   Int_t trig_mean = 0;
@@ -177,6 +192,10 @@ void decode(TString filename) {
   Int_t n_trig = 0;
   Int_t n_delay_cali = 0;
   Int_t n_delay_data = 0;
+  if(delay_data != -2e3)
+    n_delay_data = 100;
+  if(delay_cali != -2e3)
+    n_delay_cali = 100;
   Int_t n_saved_data = 0;
   Int_t n_saved_cali = 0;
   TGraph* g_data = 0;//new TGraph(1024);
@@ -184,7 +203,7 @@ void decode(TString filename) {
   TGraph* g_trig = 0;
   TGraph* g_Flag = 0;
   TGraph* g_hits = 0;
-  TCanvas* c1= new TCanvas();
+  //TCanvas* c1= new TCanvas();
   TH1F* h_data = new TH1F("h_data","Integral50_{data}",1001,-500.5,500.5);
   TH1F* h_cali = new TH1F("h_cali","Integral50_{cali}",1001,-500.5,500.5);
 
@@ -197,6 +216,9 @@ void decode(TString filename) {
   char hdr[] = {'E','H','D','R'};
   outfile->mkdir("Graphs");
   outfile->cd("Graphs");
+
+  time_t timer;
+  struct tm tm_time;
   for (n=0 ; fread(&header, sizeof(header), 1, f) > 0; n++) {
     //  cout << "30" << endl;
     // decode time     
@@ -211,6 +233,14 @@ void decode(TString filename) {
     month = header.month;
     day = header.day;
     time_stamp = header.hour*3600+header.minute*60+header.second+header.millisecond/1000.; 
+    tm_time.tm_hour = header.hour;
+    tm_time.tm_min  = header.minute;
+    tm_time.tm_sec  = header.second;
+    tm_time.tm_year = header.year;
+    tm_time.tm_mon  = header.month;
+    tm_time.tm_mday = header.day;
+    timestamp = int(mktime(&tm_time))+header.millisecond/1000.;
+
     if (n == 0 && verbose) cout << "millisecond " << header.millisecond << std::endl;
 
     if (n == 0 && verbose) cout << "waveform size : " <<    sizeof(waveform)/4*n_channels << endl;
@@ -221,7 +251,7 @@ void decode(TString filename) {
     }
 
     // print this info for every 10kth event
-    if (n%10000 == 0) cout << "\t year "<< year << ": month " << month << ": day " << day << " : hour " << std::setfill(' ')<<std::setw(2)<<header.hour << " : minute " <<std::setfill(' ')<<std::setw(2)<< header.minute << std::flush;;
+    if (n%10000 == 0) cout << "\t year "<< year << ": month " << month << ": day " << day << " : hour " << std::setfill(' ')<<std::setw(2)<<header.hour << " : minute " <<std::setfill(' ')<<std::setw(2)<< header.minute <<"\t"<<timestamp<< std::flush;;
 
     // read the waveform
     Int_t s = sizeof(SingleWaveform_t);
@@ -236,7 +266,15 @@ void decode(TString filename) {
     // decode amplitudes in mV
     saturated = false;
     int n_min = 0;
-    int n_avrg = 30;
+    int n_avrg = 50;
+    avrg_first_chn1 = 0;
+    avrg_first_chn2 = 0;
+    avrg_first_chn3 = 0;
+    avrg_first_chn4 = 0;
+    avrg_last_chn1 = 0;
+    avrg_last_chn2 = 0;
+    avrg_last_chn3 = 0;
+    avrg_last_chn4 = 0;
     avrg_chn1 = 0;
     avrg_chn2 = 0;
     avrg_chn3 = 0;
@@ -247,35 +285,60 @@ void decode(TString filename) {
           saturated = true;
       if (waveform.chn3[i]<30)
           n_min++;
+      avrg_chn1 += waveform.chn1[i];
+      avrg_chn2 += waveform.chn2[i];
+      avrg_chn3 += waveform.chn3[i];
+      avrg_chn4 += waveform.chn4[i];
       if (i <n_avrg){
-          avrg_chn1 += waveform.chn1[i];
-          avrg_chn2 += waveform.chn2[i];
-          avrg_chn3 += waveform.chn3[i];
-          avrg_chn4 += waveform.chn4[i];
+          avrg_first_chn1 += waveform.chn1[i];
+          avrg_first_chn2 += waveform.chn2[i];
+          avrg_first_chn3 += waveform.chn3[i];
+          avrg_first_chn4 += waveform.chn4[i];
+          avrg_last_chn1 += waveform.chn1[1024 - i];
+          avrg_last_chn2 += waveform.chn2[1024 - i];
+          avrg_last_chn3 += waveform.chn3[1024 - i];
+          avrg_last_chn4 += waveform.chn4[1024 - i];
       }
-      
-      if (n_min > 30 && saturated && i > n_avrg) 
+      /*if (n_min > 30 && saturated && i > n_avrg) 
           break;
+      */
     }
-    avrg_chn1 /= (Double_t)(n_avrg);
-    avrg_chn2 /= (Double_t)(n_avrg);
-    avrg_chn3 /= (Double_t)(n_avrg);
-    avrg_chn4 /= (Double_t)(n_avrg);
+    avrg_chn1 /= (Double_t)(1024);
+    avrg_chn2 /= (Double_t)(1024);
+    avrg_chn3 /= (Double_t)(1024);
+    avrg_chn4 /= (Double_t)(1024);
     avrg_chn1 = (Double_t) (avrg_chn1 / 65535. - 0.5) * 1000;
     avrg_chn2 = (Double_t) (avrg_chn2 / 65535. - 0.5) * 1000;
     avrg_chn3 = (Double_t) (avrg_chn3 / 65535. - 0.5) * 1000;
     avrg_chn4 = (Double_t) (avrg_chn4 / 65535. - 0.5) * 1000;
 
+    avrg_first_chn1 /= (Double_t)(n_avrg);
+    avrg_first_chn2 /= (Double_t)(n_avrg);
+    avrg_first_chn3 /= (Double_t)(n_avrg);
+    avrg_first_chn4 /= (Double_t)(n_avrg);
+    avrg_first_chn1 = (Double_t) (avrg_first_chn1 / 65535. - 0.5) * 1000;
+    avrg_first_chn2 = (Double_t) (avrg_first_chn2 / 65535. - 0.5) * 1000;
+    avrg_first_chn3 = (Double_t) (avrg_first_chn3 / 65535. - 0.5) * 1000;
+    avrg_first_chn4 = (Double_t) (avrg_first_chn4 / 65535. - 0.5) * 1000;
+
+    avrg_last_chn1 /= (Double_t)(n_avrg);
+    avrg_last_chn2 /= (Double_t)(n_avrg);
+    avrg_last_chn3 /= (Double_t)(n_avrg);
+    avrg_last_chn4 /= (Double_t)(n_avrg);
+    avrg_last_chn1 = (Double_t) (avrg_last_chn1 / 65535. - 0.5) * 1000;
+    avrg_last_chn2 = (Double_t) (avrg_last_chn2 / 65535. - 0.5) * 1000;
+    avrg_last_chn3 = (Double_t) (avrg_last_chn3 / 65535. - 0.5) * 1000;
+    avrg_last_chn4 = (Double_t) (avrg_last_chn4 / 65535. - 0.5) * 1000;
 
     calibflag = (n_min>10);
 
     if (n == 1 && verbose)
         cout<<"GetTrigTimes"<<flush;
     vTrigTimes.clear();
-    for (int i =0;i < trigTimes.size();i++) vTrigTimes.push_back(trigTimes.at(i));
+    for (UInt_t i =0;i < trigTimes.size();i++) vTrigTimes.push_back(trigTimes.at(i));
 
     vHitTimes.clear();
-    for (int i =0;i < hitTimes.size();i++) vHitTimes.push_back(hitTimes.at(i));
+    for (UInt_t i =0;i < hitTimes.size();i++) vHitTimes.push_back(hitTimes.at(i));
 
     if (nTrigs==0)
       trigTime = -1;
@@ -322,9 +385,9 @@ void decode(TString filename) {
                     delay_data = delay;
                 }
                 if (n_delay_data  == 100){
-                    cout<<"\rFound final delay_data: "<<delay_data<<endl;
-                    if (delay_data<150 || delay_data > 200){
-                        delay_data = 167;
+                    cout<<"\rFound final delay_data: "<<delay_data<<" "<<endl;
+                    if (delay_data<-50 || delay_data > 200){
+                        delay_data = -32;
                         cout<<"Invalid delay_data--> Fix to: "<<delay_data<<endl;
                     }
                         
@@ -342,13 +405,13 @@ void decode(TString filename) {
                     delay_cali = delay;
                 }
                 if (n_delay_cali  == 100)
-                    cout<<"\rFound final delay_cali: "<<delay_cali<<endl;
+                    cout<<"\rFound final delay_cali: "<<delay_cali<<" "<<endl;
             }
         }
     }
     if(trigTimes.size()==0){
         if(verbose) cout<<"Cannot Find TrigTime" << endl;
-        continue;
+        trigTimes.push_back(DEFAULT_TRIGTIME);
     }
     //Calculate Integrals
     if (n == 0 && verbose)
@@ -385,6 +448,7 @@ void decode(TString filename) {
             g_cali->GetYaxis()->SetTitle("signal / mV");
             g_cali->Write();
             g_trig->SetName(TString::Format("g_cali_trig_%d03",n_saved_cali));
+            g_hits->SetName(TString::Format("g_cali_hits_%d03",n_saved_cali));
             //cout<<"Saved Cali event "<<n_saved_cali<<"/"<<k<<" "<<g_cali->GetName()<<endl;
             n_saved_cali++;
             delete g_cali;
@@ -398,6 +462,7 @@ void decode(TString filename) {
             g_data->GetYaxis()->SetTitle("signal_{ch1} / mV");
             g_data->Write();
             g_trig->SetName(TString::Format("g_data_trig_%03d",n_saved_data));
+            g_hits->SetName(TString::Format("g_data_hits_%03d",n_saved_data));
             //cout<<"Saved data event "<<n_saved_data<<"/"<<k<<" "<<g_data->GetName()<<endl;
             n_saved_data++;
             delete g_data;
@@ -417,7 +482,8 @@ void decode(TString filename) {
         delete g_hits;
     }
 
-
+    if (verbose)
+      cout<<n<<" Fill"<<endl;
     rec->Fill();
 
         
@@ -451,8 +517,10 @@ void decode(TString filename) {
 
   }
   f_data->SetNpx(1000);
+  f_data->SetLineWidth(1);
   h_data->Fit(f_data,"Q");
   TF1* f_data2= new TF1("f_data2","gaus",-500,500);
+  f_data2->SetLineWidth(1);
   f_data2->SetNpx(1000);
   f_data2->SetLineColor(kGreen);
   Float_t mp = h_data->GetBinCenter(h_data->GetMaximumBin());
@@ -462,6 +530,10 @@ void decode(TString filename) {
   cout<<"RUN "<<filename<<":\n\tDATA: "<<f_data->GetParameter(1)<<"\n\tCALI: "<<f_cali->GetParameter(1)<<endl;
   h_data->Write();
   h_cali->Write();
+  TString pic_name = filename(filename.Last('/')+1,filename.Length()-filename.Last('/'));
+  TCanvas c2("c_"+pic_name);
+  h_data->Draw();
+  c2.SaveAs("input/h_data_"+pic_name+".png");
   dt_cali.GetHisto()->Write();
   dt_data.GetHisto()->Write();
   outfile->Close();
@@ -490,16 +562,20 @@ void usage(){
 }
 
 int main(int argc, char* argv[]){
-   verbose = false;;
+   verbose = false;
 
   TString infile;
   TString outfile;
+  delay_data = -2e3;
+  delay_cali = -2e3;
   // Parse options
   char ch;
-  while ((ch = getopt(argc, argv, "i:h")) != -1 ) {
+  while ((ch = getopt(argc, argv, "d:c:i:h")) != -1 ) {
     switch (ch) {
       case 'i': infile  = TString(optarg);  break;
       case 'h': usage(); break;
+      case 'd': cout<<"Analyse: \""<<optarg<<"\""<<endl;delay_data = atoi(optarg);cout<<"Set delay_data to "<<delay_data<<endl;break;
+      case 'c': delay_cali = atoi(optarg);cout<<"Set delay_cali t0 "<<delay_cali<<endl;
       default:
       cerr << "*** Error: unknown option " << optarg << std::endl;
       usage();

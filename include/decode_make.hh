@@ -59,6 +59,7 @@ Waveform_t waveform;
 TTree *rec;
 Int_t year, month, day;
 Double_t  time_stamp;
+Double_t timestamp;
 Double_t t[1024], chn1[1024], chn2[1024], chn3[1024], chn4[1024];
 Int_t n_channels = 4;
 Int_t n;
@@ -74,6 +75,17 @@ bool saturated;
 vector<Int_t> vTrigTimes;
 vector<Int_t> vHitTimes;
 Float_t avrg_chn1,avrg_chn2,avrg_chn3,avrg_chn4;
+
+Float_t avrg_first_chn1;
+Float_t avrg_first_chn2;
+Float_t avrg_first_chn3;
+Float_t avrg_first_chn4;
+Float_t avrg_last_chn1;
+Float_t avrg_last_chn2;
+Float_t avrg_last_chn3;
+Float_t avrg_last_chn4;
+
+
 int n_wf;
 int calibflag;
 
