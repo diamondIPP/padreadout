@@ -57,3 +57,7 @@ clean:
 	find $(SRCDIR) -name '*.o' -exec $(RM) -v {} ';' 
 	$(RM) decode
 
+
+rootclean:
+	$(RM) -v $(OUTPUT)/*
+	$(RM) results.txt
