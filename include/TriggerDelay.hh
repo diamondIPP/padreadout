@@ -10,6 +10,7 @@
 #include "TH1D.h"
 #include "TH2D.h"
 #include "TString.h"
+#include "TGraph.h"
 #include <math.h>
 
 using namespace std;
@@ -24,8 +25,10 @@ class TriggerDelay{
     void SetName(TString name){this->name = name;};
     void SetTriggerTime(Int_t* time){First_trigger_time = time;};
     TH2D* GetHisto(){return h_max_signal_time_vs_ampitude;}
+    TGraph* GetAverageGraph();
     Int_t GetEvents(){return nSigs;}
     Int_t GetNAvrg(){return n_avrg;}
+    Int_t check_delay(Float_t mean);
     
   private:
     void AnalyzeWaveform();
@@ -40,6 +43,9 @@ class TriggerDelay{
     Int_t *First_trigger_time;
     TString name;
     TH2D* h_max_signal_time_vs_ampitude;
+    Int_t final_delay;
+    Int_t n_delay;
+    Int_t n_delay_off;
 };
     
   

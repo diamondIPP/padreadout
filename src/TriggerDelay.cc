@@ -13,6 +13,7 @@ TriggerDelay::TriggerDelay(Int_t n_avrg,TString name){
   this->name = name;
   h_max_signal_time_vs_ampitude = new TH2D((TString)"h_max_signal_time_vs_ampitude_"+name,(TString)"Max signal time vs ampitude "+ name,2048,-1024,1024,1200,-600,600);
   First_trigger_time = 0;
+  final_delay = -2e3;
 }
 
 
@@ -52,6 +53,32 @@ void TriggerDelay::AddWaveform(unsigned short wf[],UInt_t size){
     if (nSigs>=n_avrg && nSigs%n_avrg==0)
       AnalyzeWaveform();
 };
+
+Int_t TriggerDelay::check_delay(Float_t mean) {
+	if (GetEvents()<GetNAvrg())
+		return -2e3;
+	Int_t delay = (Int_t)GetMean()-mean;
+//	cout<<" delay: "<<delay<<" "<<final_delay<<flush;
+	if (delay == final_delay){
+		n_delay++;
+		n_delay_off = 0;
+	}
+	else if(fabs(delay-final_delay)>5 || n_delay_off>30){
+		if (final_delay !=-2e3)
+			cout<<"\nLost delay_"<<name<<":"<<final_delay<<" after "<<n_delay<<endl;
+		n_delay = 0;
+		final_delay = delay;
+		n_delay_off = 0;
+	}
+	else{
+		n_delay_off +=1;
+	}
+	if (n_delay  == 100){
+		cout<<"\nFound final delay_"<<name<<": "<<final_delay<<"   "<<endl;
+		return final_delay;
+	}
+	return -2e3;
+}
 
 void TriggerDelay::AnalyzeWaveform(){
   //cout<<name<<"::AnalyzeWaveform()"<<endl;
@@ -98,4 +125,30 @@ Double_t TriggerDelay::FindSignalMax(Int_t first, Int_t last, unsigned long sig[
 Int_t TriggerDelay::GetMean() {return n==0?-1:(Int_t)(mean/n+.5);};
 
 Double_t TriggerDelay::GetRMS() {Double_t retVal = n==0?-1:sigma-mean/n*mean/n; return retVal>=0?sqrt(retVal):retVal;}
+
+TGraph* TriggerDelay::GetAverageGraph(){
+	Int_t n = avrgSig.size();
+	Double_t x[n];
+	Double_t y[n];
+	for (UInt_t i = 0; i < n; i++){
+		x[i] = i;
+		y[i] = ((Float_t)avrgSig[i]/n_avrg / 65535. - 0.5) * 1000;
+	}
+	TGraph* g = new TGraph(n,x,y);
+	TString gName = "gAvrgSignal_"+name;
+	g->SetName(gName);
+	g->SetTitle(gName);
+	g->Draw("goff");
+	g->GetXaxis()->SetTitle("waveform point");
+	g->GetYaxis()->SetTitle("avrg Signal "+ name);
+	g->SetLineWidth(3);
+	if (name.Contains("CAL") || name.Contains("cal"))
+		g->SetLineColor(kBlue);
+	else if(name.Contains("TRIG") || name.Contains("trig"))
+		g->SetLineColor(kRed);
+	else
+		g->SetLineColor(kYellow);
+	return g;
+
+}
     
