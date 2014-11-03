@@ -74,7 +74,7 @@ int calibflag;
 
 time_t timer;
 struct tm tm_time;
-float tigger_time;
+float trigger_time;
 
 int n_events;
 

@@ -121,7 +121,7 @@ void SetBranches(){
 	rec->Branch("avrg_last_chn3", &avrg_last_chn3,"avrg_last_chn3/F");
 	rec->Branch("avrg_last_chn4", &avrg_last_chn4,"avrg_last_chn4/F");
 	rec->Branch("n_wf",&n_wf,"n_wf/I");
-	rec->Branch("tigger_time",&tigger_time,"tigger_time/F");
+	rec->Branch("trigger_time",&trigger_time,"trigger_time/F");
 }
 
 void find_trigger_delay(FILE *f,TFile* rootfile){
@@ -208,11 +208,11 @@ void get_trigger_times(){
 	if(trigTimes.size()==0){
 		if(verbose) cout<<"Cannot Find TrigTime" << endl;
 		trigTimes.push_back(DEFAULT_TRIGTIME);
-		tigger_time  = -1;
+		trigger_time  = -1;
 	}
 	else{
-		tigger_time = header.time[trigTime];
-//		cout<<tigger_time<<endl;
+		trigger_time =header.time[trigTime];
+//		cout<<" "<<trigTime<<" "<<tigger_time<<"s "<< flush;
 	}
 }
 
@@ -406,7 +406,7 @@ void decode(TString filename) {
 		//Save waveforms
 		if (n == 0 && verbose)
 			cout<<"Save Graphs"<<endl;
-		if ((n_saved_cali < 20 && calibflag && n_delay_cali==100) || (n_saved_data <= 20 && !calibflag && n_delay_data == 100)){
+		if ((n_saved_cali < 20 && calibflag) || (n_saved_data <= 20 && !calibflag)){
 			for (Int_t i=0; i<WF_LENGHT; i++) {
 				chn1[i] = (Double_t) ((waveform.chn1[i]) / 65535. - 0.5) * 1000;
 				chn2[i] = (Double_t) ((waveform.chn2[i]) / 65535. - 0.5) * 1000;
