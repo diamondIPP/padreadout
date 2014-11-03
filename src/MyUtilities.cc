@@ -11,6 +11,11 @@
 #include "../include/MyUtilities.hh"
 
 using namespace std;
+//
+Double_t convertToVoltage(unsigned short input){
+	return (Double_t) (input / 65535. - 0.5) * 1000;
+}
+
 int GetNrecordedWaveforms(FILE* f){
 	cout<<"Get N Waveforms: "<<endl;
 	char patternArray[] = {'E','H','D','R'};

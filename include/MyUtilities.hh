@@ -13,6 +13,7 @@
 #include <iostream>
 #include <fstream>
 #include <math.h>
+#include "TROOT.h"
 
 struct Header_t {
   char           event_header[4];
@@ -42,6 +43,7 @@ struct Waveform_t {
   char           chn4_header[4];
   unsigned short chn4[1024];
 };
+Double_t convertToVoltage(unsigned short input);
 
 int GetNrecordedWaveforms(FILE* f);
 
