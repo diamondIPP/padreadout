@@ -6,6 +6,8 @@
 #include <math.h>
 #include <getopt.h>
 
+#include <sys/stat.h>
+
 #include "TFile.h"
 #include "TF1.h"
 #include "TTree.h"
@@ -16,6 +18,7 @@
 #include "TCanvas.h"
 
 #include "TStopwatch.h"
+#include "MyUtilities.hh"
 
 
 using namespace std;
@@ -23,44 +26,18 @@ using namespace std;
 
 //void usage();
 //void decode(TString);
-struct Header_t {
-  char           event_header[4];
-  unsigned int   serial_number;
-  unsigned short year;
-  unsigned short month;
-  unsigned short day;
-  unsigned short hour;
-  unsigned short minute;
-  unsigned short second;
-  unsigned short millisecond;
-  unsigned short reserved1;
-  float time[1024];
-};
-
-struct SingleWaveform_t{
-  char           header[4];
-  unsigned short chn[1024];
-};
-struct Waveform_t {
-  char           chn1_header[4];
-  unsigned short chn1[1024];
-  char           chn2_header[4];
-  unsigned short chn2[1024];
-  char           chn3_header[4];
-  unsigned short chn3[1024];
-  char           chn4_header[4];
-  unsigned short chn4[1024];
-};
+#define WF_LENGHT 1024
 
 
 bool verbose;
 Header_t header;
 Waveform_t waveform;
 TTree *rec;
+FILE *f;
 Int_t year, month, day;
 Double_t  time_stamp;
 Double_t timestamp;
-Double_t t[1024], chn1[1024], chn2[1024], chn3[1024], chn4[1024];
+Double_t t[WF_LENGHT], chn1[WF_LENGHT], chn2[WF_LENGHT], chn3[WF_LENGHT], chn4[WF_LENGHT];
 Int_t n_channels = 4;
 Int_t n;
 Int_t k =0;
@@ -86,7 +63,23 @@ Float_t avrg_last_chn3;
 Float_t avrg_last_chn4;
 
 
+Int_t n_delay_cali = 0;
+Int_t n_delay_data = 0;
+Int_t n_trig = 0;
+Int_t trig_mean;
+Int_t trig_mean2;
+
 int n_wf;
 int calibflag;
 
+time_t timer;
+struct tm tm_time;
+float tigger_time;
+
+int n_events;
+
+void read_header();
+void read_waveforms();
+void update_averages();
+void get_trigger_times();
 
