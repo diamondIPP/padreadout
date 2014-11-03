@@ -34,3 +34,5 @@ data/output
 data/results.txt
 
 **/*~
+.cproject
+.project
