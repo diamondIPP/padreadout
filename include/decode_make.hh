@@ -16,7 +16,7 @@
 #include "TriggerDelay.hh"
 #include "TableUpdater.hh"
 #include "TCanvas.h"
-
+#include "TMultiGraph.h"
 #include "TStopwatch.h"
 #include "MyUtilities.hh"
 
@@ -47,7 +47,7 @@ Double_t Integrals[] = {-1,-1,-1,-1};
 Double_t *pIntegrals = &Integrals[0];
 Int_t nTrigs;
 Int_t nHits;
-Int_t trigTime;
+Int_t trigger_point;
 bool saturated;
 vector<Int_t> vTrigTimes;
 vector<Int_t> vHitTimes;
@@ -65,6 +65,8 @@ Float_t avrg_last_chn4;
 
 Int_t n_delay_cali = 0;
 Int_t n_delay_data = 0;
+Int_t fixed_delay_data = -1;
+Int_t fixed_delay_cali = -1;
 Int_t n_trig = 0;
 Int_t trig_mean;
 Int_t trig_mean2;
@@ -75,6 +77,8 @@ int calibflag;
 time_t timer;
 struct tm tm_time;
 float trigger_time;
+Int_t sampling_point;
+Float_t sampling_time;
 
 int n_events;
 

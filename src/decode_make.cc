@@ -37,6 +37,7 @@ vector<Int_t> Get1stTriggerTime(Double_t trig_level,unsigned short chn_trg[],Int
 	return vecTrigTimes;
 }
 
+
 void GetIntegrals(Int_t k,unsigned short sig[],Int_t trigTime,Int_t delay, Double_t *Integrals){
 	if(verbose)
 		cout<<k <<"Get Integral "<< trigTime<<" "<<delay<<endl;
@@ -45,6 +46,8 @@ void GetIntegrals(Int_t k,unsigned short sig[],Int_t trigTime,Int_t delay, Doubl
 		return;
 	if (delay == -2e3) delay = 0;
 	Int_t pos = trigTime+delay;
+	sampling_point = pos;
+	sampling_time = header.time[pos];
 	//return;
 	Int_t integral = 0;
 	if (pos<0 || WF_LENGHT <= pos)
@@ -63,19 +66,19 @@ void GetIntegrals(Int_t k,unsigned short sig[],Int_t trigTime,Int_t delay, Doubl
 		switch (i){
 		case 25:
 			Integrals[0] = integral/(Double_t)(n+1);
-			Integrals[0] = (Double_t) (Integrals[0] / 65535. - 0.5) * 1000;
+			Integrals[0] = convertToVoltage(Integrals[0]);
 			break;
 		case 50:
 			Integrals[1] = integral/(Double_t)(n+1);
-			Integrals[1] = (Double_t) (Integrals[1] / 65535. - 0.5) * 1000;
+			Integrals[1] = convertToVoltage(Integrals[1]);
 			break;
 		case 100:
 			Integrals[2] = integral/(Double_t)(n+1);
-			Integrals[2] = (Double_t) (Integrals[2] / 65535. - 0.5) * 1000;
+			Integrals[2] = convertToVoltage(Integrals[2]);
 			break;
 		case 200:
 			Integrals[3] = integral/(Double_t)(n+1);
-			Integrals[3] = (Double_t) (Integrals[3] / 65535. - 0.5) * 1000;
+			Integrals[3] = convertToVoltage(Integrals[3]);
 			break;
 		}
 	}
@@ -94,7 +97,6 @@ void SetBranches(){
 	// Create branches for the channels
 	//rec->Branch("chn1", &chn1 ,"chn1[WF_LENGHT]/D");
 	//rec->Branch("chn2", &chn2 ,"chn2[WF_LENGHT]/D");
-
 	rec->Branch("calibflag", &calibflag ,"calibflag/I");
 	rec->Branch("delay_data",&delay_data ,"delay_data/I");
 	rec->Branch("delay_cali",&delay_cali ,"delay_cali/I");
@@ -104,7 +106,7 @@ void SetBranches(){
 	rec->Branch("Integral400",&Integrals[3],"Integral400/D");
 	rec->Branch("saturated",&saturated,"saturated/O");
 	rec->Branch("nTrigs",&nTrigs,"nTrigs/I");
-	rec->Branch("trigTime",&trigTime,"trigTime/I");
+	rec->Branch("trigger_point",&trigger_point,"trigger_point/I");
 	rec->Branch("vTrigTimes",&vTrigTimes);
 	rec->Branch("vHitTimes",&vHitTimes);
 	rec->Branch("nHits",&nHits,"nHits/I");
@@ -122,6 +124,11 @@ void SetBranches(){
 	rec->Branch("avrg_last_chn4", &avrg_last_chn4,"avrg_last_chn4/F");
 	rec->Branch("n_wf",&n_wf,"n_wf/I");
 	rec->Branch("trigger_time",&trigger_time,"trigger_time/F");
+	rec->Branch("sampling_time",&sampling_time,"sampling_time/F");
+	rec->Branch("sampling_point",&sampling_point,"sampling_point/I");
+
+	rec->Branch("fixed_delay_cali",&fixed_delay_cali,"fixed_delay_cali/I");
+	rec->Branch("fixed_delay_data",&fixed_delay_data,"fixed_delay_data/I");
 }
 
 void find_trigger_delay(FILE *f,TFile* rootfile){
@@ -129,17 +136,15 @@ void find_trigger_delay(FILE *f,TFile* rootfile){
 	TriggerDelay dt_data(128,"DATA");
 	TriggerDelay dt_cali(16,"CALI");
 	TriggerDelay dt_trig(128,"TRIG");
-
-	if(delay_data != -2e3)
-		n_delay_data = 100;
-	if(delay_cali != -2e3)
-		n_delay_cali = 100;
-	delay_cali = -2e3;
-	delay_data = -2e3;
+	Int_t delay_data_old = delay_data;
+	Int_t delay_cali_old = delay_cali;
+	//	delay_cali = -2e3;
+	//	delay_data = -2e3;
 	for (n=0 ; fread(&header, sizeof(header), 1, f) > 0; n++) {
 		read_header();
 		read_waveforms();
-		cout<<"\r "<<n<<" "<<dt_data.GetEvents()<<"\t"<<dt_cali.GetEvents()<<" "<<n_delay_cali<<" "<<n_delay_data<<" "<<" "<<avrg_chn2<<" "<<flush;
+		if (n%100==0)
+			cout<<"\r "<<n<<" "<<dt_data.GetEvents()<<"\t"<<dt_cali.GetEvents()<<" "<<n_delay_cali<<" "<<n_delay_data<<" "<<" "<<avrg_chn2<<" "<<flush;
 		get_trigger_times();
 		update_averages();
 		if (calibflag)
@@ -173,10 +178,31 @@ void find_trigger_delay(FILE *f,TFile* rootfile){
 	cout<<"Found Trigger delays: "<<endl;
 	cout<<"\tData: "<<delay_data<<endl;
 	cout<<"\tCali: "<<delay_cali<<endl;
+
+	if (delay_data_old != -2e3){
+		fixed_delay_data = delay_data;
+		delay_data = delay_data_old;
+		cout<<"USING fixed delay data: "<<delay_data<<endl;
+	}
+	if (delay_cali_old != -2e3){
+		fixed_delay_cali = delay_cali;
+		delay_cali = delay_cali_old;
+		cout<<"USING fixed delay cali: "<<delay_cali<<endl;
+
+	}
 	rootfile->cd();
-	dt_data.GetAverageGraph()->Clone()->Write();
-	dt_trig.GetAverageGraph()->Clone()->Write();
-	dt_cali.GetAverageGraph()->Clone()->Write();
+	TGraph *g_data =dt_data.GetAverageGraph();
+	TGraph *g_trig =dt_trig.GetAverageGraph();
+	TGraph *g_cali =dt_cali.GetAverageGraph();
+	g_data->Write();
+	g_cali->Write();
+	g_trig->Write();
+	TMultiGraph *mg = new TMultiGraph("mgAverageSignals","mgAverageSignals");
+	mg->Add(g_data);
+	mg->Add(g_cali);
+	mg->Add(g_trig);
+	mg->Write();
+	delete mg;
 	rewind(f);
 }
 
@@ -197,11 +223,11 @@ void get_trigger_times(){
 			vHitTimes.push_back(hitTimes.at(i));
 
 	if (nTrigs==0)
-		trigTime = -1;
+		trigger_point = -1;
 	else{
-		trigTime = trigTimes.at(0);
-		trig_mean += trigTime;
-		trig_mean2+= trigTime*trigTime;
+		trigger_point = trigTimes.at(0);
+		trig_mean += trigger_point;
+		trig_mean2+= trigger_point*trigger_point;
 		n_trig++;
 	}
 
@@ -211,8 +237,8 @@ void get_trigger_times(){
 		trigger_time  = -1;
 	}
 	else{
-		trigger_time =header.time[trigTime];
-//		cout<<" "<<trigTime<<" "<<tigger_time<<"s "<< flush;
+		trigger_time =header.time[trigger_point];
+		//		cout<<" "<<trigTime<<" "<<tigger_time<<"s "<< flush;
 	}
 }
 
@@ -233,7 +259,6 @@ void update_averages(){
 	avrg_chn3 = 0;
 	avrg_chn4 = 0;
 	for (Int_t i=0; i<WF_LENGHT; i++) {
-		//chn3_int += (Double_t) ((waveform.chn3[i]) / 65535. - 0.5) * 1000;
 		if (!saturated && (waveform.chn1[i] >= 65535 || waveform.chn1[i]==0))
 			saturated = true;
 		if (waveform.chn3[i]<30)
@@ -256,32 +281,20 @@ void update_averages(){
 		  break;
 		 */
 	}
-	avrg_chn1 /= (Double_t)(WF_LENGHT);
-	avrg_chn2 /= (Double_t)(WF_LENGHT);
-	avrg_chn3 /= (Double_t)(WF_LENGHT);
-	avrg_chn4 /= (Double_t)(WF_LENGHT);
-	avrg_chn1 = (Double_t) (avrg_chn1 / 65535. - 0.5) * 1000;
-	avrg_chn2 = (Double_t) (avrg_chn2 / 65535. - 0.5) * 1000;
-	avrg_chn3 = (Double_t) (avrg_chn3 / 65535. - 0.5) * 1000;
-	avrg_chn4 = (Double_t) (avrg_chn4 / 65535. - 0.5) * 1000;
+	avrg_chn1 = convertToVoltage(avrg_chn1/WF_LENGHT);
+	avrg_chn2 = convertToVoltage(avrg_chn2/WF_LENGHT);
+	avrg_chn3 = convertToVoltage(avrg_chn3/WF_LENGHT);
+	avrg_chn4 = convertToVoltage(avrg_chn4/WF_LENGHT);
 
-	avrg_first_chn1 /= (Double_t)(n_avrg);
-	avrg_first_chn2 /= (Double_t)(n_avrg);
-	avrg_first_chn3 /= (Double_t)(n_avrg);
-	avrg_first_chn4 /= (Double_t)(n_avrg);
-	avrg_first_chn1 = (Double_t) (avrg_first_chn1 / 65535. - 0.5) * 1000;
-	avrg_first_chn2 = (Double_t) (avrg_first_chn2 / 65535. - 0.5) * 1000;
-	avrg_first_chn3 = (Double_t) (avrg_first_chn3 / 65535. - 0.5) * 1000;
-	avrg_first_chn4 = (Double_t) (avrg_first_chn4 / 65535. - 0.5) * 1000;
+	avrg_first_chn1 = convertToVoltage(avrg_first_chn1/n_avrg);
+	avrg_first_chn2 = convertToVoltage(avrg_first_chn2/n_avrg);
+	avrg_first_chn3 = convertToVoltage(avrg_first_chn3/n_avrg);
+	avrg_first_chn4 = convertToVoltage(avrg_first_chn4/n_avrg);
 
-	avrg_last_chn1 /= (Double_t)(n_avrg);
-	avrg_last_chn2 /= (Double_t)(n_avrg);
-	avrg_last_chn3 /= (Double_t)(n_avrg);
-	avrg_last_chn4 /= (Double_t)(n_avrg);
-	avrg_last_chn1 = (Double_t) (avrg_last_chn1 / 65535. - 0.5) * 1000;
-	avrg_last_chn2 = (Double_t) (avrg_last_chn2 / 65535. - 0.5) * 1000;
-	avrg_last_chn3 = (Double_t) (avrg_last_chn3 / 65535. - 0.5) * 1000;
-	avrg_last_chn4 = (Double_t) (avrg_last_chn4 / 65535. - 0.5) * 1000;
+	avrg_last_chn1 = convertToVoltage(avrg_last_chn1/n_avrg);
+	avrg_last_chn2 = convertToVoltage(avrg_last_chn2/n_avrg);
+	avrg_last_chn3 = convertToVoltage(avrg_last_chn3/n_avrg);
+	avrg_last_chn4 = convertToVoltage(avrg_last_chn4/n_avrg);
 
 	calibflag = (n_min>10 && n_wf > 2);
 }
@@ -324,7 +337,7 @@ void read_waveforms(){
 	if (n%1000 == 0) cout << "\r"<<n<<"/"<<n_events << std::flush;
 	// read the waveform
 	Int_t s = sizeof(SingleWaveform_t);
-//	if (verbose && n == 1)
+	//	if (verbose && n == 1)
 	float sizeofwaveform = fread(&waveform, n_wf*s, 1, f);
 	if (verbose && n == 1)
 		cout << "sizeofwaveform: " << sizeofwaveform << std::endl;
@@ -415,49 +428,78 @@ void decode(TString filename) {
 				t[i] = (Double_t) header.time[i];
 			}
 			g_trig = new TGraph(1023,t,chn2);
-			g_hits = new TGraph(1023,t,chn4);
+			if (n_wf>3)
+				g_hits = new TGraph(1023,t,chn4);
 
 			if (calibflag){
 				g_cali = new TGraph(1023,t,chn1);
 				g_cali->SetName(TString::Format("g_cali_%d03",n_saved_cali));
 				g_cali->SetTitle(TString::Format("Calibration Event %06d",k));
 				g_cali->Draw("goffAPL");
+				g_cali->SetLineColor(kYellow);
+				g_cali->SetLineWidth(3);
 				g_cali->GetXaxis()->SetTitle("time");
 				g_cali->GetYaxis()->SetTitle("signal / mV");
 				g_cali->Write();
 				g_trig->SetName(TString::Format("g_cali_trig_%d03",n_saved_cali));
-				g_hits->SetName(TString::Format("g_cali_hits_%d03",n_saved_cali));
+				if (g_hits) g_hits->SetName(TString::Format("g_cali_hits_%d03",n_saved_cali));
 				//cout<<"Saved Cali event "<<n_saved_cali<<"/"<<k<<" "<<g_cali->GetName()<<endl;
 				n_saved_cali++;
-				delete g_cali;
 			}
 			else{
 				g_data = new TGraph(1023,t,chn1);
 				g_data->SetName(TString::Format("g_data_%03d",n_saved_data));
 				g_data->SetTitle(TString::Format("Data Event %06d",k));
 				g_data->Draw("goffAPL");
+				g_data->SetLineColor(kYellow);
+				g_data->SetLineWidth(3);
 				g_data->GetXaxis()->SetTitle("time");
 				g_data->GetYaxis()->SetTitle("signal_{ch1} / mV");
 				g_data->Write();
 				g_trig->SetName(TString::Format("g_data_trig_%03d",n_saved_data));
-				g_hits->SetName(TString::Format("g_data_hits_%03d",n_saved_data));
+				if (g_hits) g_hits->SetName(TString::Format("g_data_hits_%03d",n_saved_data));
 				//cout<<"Saved data event "<<n_saved_data<<"/"<<k<<" "<<g_data->GetName()<<endl;
 				n_saved_data++;
-				delete g_data;
 			}
 			g_trig->SetTitle(TString::Format("Trig Event %06d",k));
 			g_trig->Draw("goffAPL");
+			g_trig->SetLineColor(kBlue);
+			g_trig->SetLineWidth(3);
 			g_trig->GetXaxis()->SetTitle("time");
 			g_trig->GetYaxis()->SetTitle("signal_{ch2} / mV");
 			g_trig->Write();
-			delete g_trig;
 
-			g_hits->SetTitle(TString::Format("Hits Event %06d",k));
-			g_hits->Draw("goffAPL");
-			g_hits->GetXaxis()->SetTitle("time");
-			g_hits->GetYaxis()->SetTitle("signal_{ch4} / mV");
-			g_hits->Write();
-			delete g_hits;
+			if (g_hits) {
+				g_hits->SetTitle(TString::Format("Hits Event %06d",k));
+				g_hits->Draw("goffAPL");
+				g_hits->SetLineColor(kGreen);
+				g_hits->SetLineWidth(3);
+				g_hits->GetXaxis()->SetTitle("time");
+				g_hits->GetYaxis()->SetTitle("signal_{ch4} / mV");
+				g_hits->Write();
+			}
+
+			TString title;
+			if (calibflag)
+				title = TString::Format("mgOverview_calib_%06d",n_saved_cali);
+			else
+				title = TString::Format("mgOverview_data_%06d",n_saved_data);
+
+			TMultiGraph* mg = new TMultiGraph(title,title);
+			if (g_data)
+				mg->Add(g_data);
+			if (g_cali)
+				mg->Add(g_cali);
+			if (g_trig)
+				mg->Add(g_trig);
+			if (g_hits)
+				mg->Add(g_hits);
+			mg->Write();
+			delete mg;
+			g_hits=0;
+			g_trig =0;
+			g_data = 0;
+			g_cali = 0;
 		}
 
 		if (verbose)
