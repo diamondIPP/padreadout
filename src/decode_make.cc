@@ -546,12 +546,14 @@ void decode(TString filename) {
 		mp = mean;
 	h_data->Fit(f_data2,"Q+","",mp-sigma/2.,mp+sigma/2.);
 	cout<<"RUN "<<filename<<":\n\tDATA: "<<f_data->GetParameter(1)<<"\n\tCALI: "<<f_cali->GetParameter(1)<<endl;
-	h_data->Write();
-	h_cali->Write();
+
 	TString pic_name = filename(filename.Last('/')+1,filename.Length()-filename.Last('/'));
 	TCanvas c2("c_"+pic_name);
-	h_data->Draw();
+	if (h_data && !h_data->IsZombie() && h_data->GetEntries()>0)
+		h_data->Draw();
 	c2.SaveAs("input/h_data_"+pic_name+".png");
+	h_data->Write();
+	h_cali->Write();
 	dt_cali.GetHisto()->Write();
 	dt_data.GetHisto()->Write();
 	outfile->Close();
@@ -571,8 +573,6 @@ void decode(TString filename) {
 	cout << "cpu time:  " << stopwatch.CpuTime() << std::endl;
 	//cout << "real time: " << stopwatch.RealTime() << std::endl;
 	stopwatch.Reset();
-
-
 }
 
 void usage(){
@@ -593,7 +593,7 @@ int main(int argc, char* argv[]){
 		case 'i': infile  = TString(optarg);  break;
 		case 'h': usage(); break;
 		case 'd': cout<<"Analyse: \""<<optarg<<"\""<<endl;delay_data = atoi(optarg);cout<<"Set delay_data to "<<delay_data<<endl;break;
-		case 'c': delay_cali = atoi(optarg);cout<<"Set delay_cali t0 "<<delay_cali<<endl;
+		case 'c': cout<<"Analyse: \""<<optarg<<"\""<<endl;delay_cali = atoi(optarg);cout<<"Set delay_cali to "<<delay_cali<<endl;break;
 		default:
 			cerr << "*** Error: unknown option " << optarg << std::endl;
 			usage();
