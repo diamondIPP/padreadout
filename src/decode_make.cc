@@ -576,7 +576,7 @@ void decode(TString filename) {
 }
 
 void usage(){
-	cout<< "usage:\n ./decode -i <filename>" << std::endl;
+	cout<< "usage:\n ./decode -i <filename> [-d DELAY_DATA] [-c DELAY_CONFIG]" << std::endl;
 }
 
 int main(int argc, char* argv[]){
