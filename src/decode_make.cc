@@ -435,14 +435,18 @@ void decode(TString filename) {
 				g_cali = new TGraph(1023,t,chn1);
 				g_cali->SetName(TString::Format("g_cali_%d03",n_saved_cali));
 				g_cali->SetTitle(TString::Format("Calibration Event %06d",k));
-				g_cali->Draw("goffAPL");
+				if (g_cali && !g_cali->IsZombie())
+					g_cali->Draw("goffAPL");
 				g_cali->SetLineColor(kYellow);
 				g_cali->SetLineWidth(3);
-				g_cali->GetXaxis()->SetTitle("time");
-				g_cali->GetYaxis()->SetTitle("signal / mV");
+				if (g_cali->GetXaxis())
+					g_cali->GetXaxis()->SetTitle("time");
+				if (g_cali->GetYaxis())
+					g_cali->GetYaxis()->SetTitle("signal / mV");
 				g_cali->Write();
 				g_trig->SetName(TString::Format("g_cali_trig_%d03",n_saved_cali));
-				if (g_hits) g_hits->SetName(TString::Format("g_cali_hits_%d03",n_saved_cali));
+				if (g_hits)
+					g_hits->SetName(TString::Format("g_cali_hits_%d03",n_saved_cali));
 				//cout<<"Saved Cali event "<<n_saved_cali<<"/"<<k<<" "<<g_cali->GetName()<<endl;
 				n_saved_cali++;
 			}
@@ -450,11 +454,14 @@ void decode(TString filename) {
 				g_data = new TGraph(1023,t,chn1);
 				g_data->SetName(TString::Format("g_data_%03d",n_saved_data));
 				g_data->SetTitle(TString::Format("Data Event %06d",k));
-				g_data->Draw("goffAPL");
+				if (g_data && !g_data->IsZombie())
+					g_data->Draw("goffAPL");
 				g_data->SetLineColor(kYellow);
 				g_data->SetLineWidth(3);
-				g_data->GetXaxis()->SetTitle("time");
-				g_data->GetYaxis()->SetTitle("signal_{ch1} / mV");
+				if (g_data->GetXaxis())
+					g_data->GetXaxis()->SetTitle("time");
+				if (g_data->GetYaxis())
+					g_data->GetYaxis()->SetTitle("signal_{ch1} / mV");
 				g_data->Write();
 				g_trig->SetName(TString::Format("g_data_trig_%03d",n_saved_data));
 				if (g_hits) g_hits->SetName(TString::Format("g_data_hits_%03d",n_saved_data));
@@ -581,7 +588,8 @@ void usage(){
 
 int main(int argc, char* argv[]){
 	verbose = false;
-
+	gROOT->SetBatch();
+	TCanvas *c1 = new TCanvas();
 	TString infile;
 	TString outfile;
 	delay_data = -2e3;
