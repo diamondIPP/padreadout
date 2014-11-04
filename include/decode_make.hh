@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 
 #include "TFile.h"
+#include "TCanvas.h"
 #include "TF1.h"
 #include "TTree.h"
 #include "TGraph.h"
@@ -28,7 +29,7 @@ using namespace std;
 //void decode(TString);
 #define WF_LENGHT 1024
 
-
+TCanvas *c1;
 bool verbose;
 Header_t header;
 Waveform_t waveform;

@@ -449,6 +449,7 @@ void decode(TString filename) {
 					g_hits->SetName(TString::Format("g_cali_hits_%d03",n_saved_cali));
 				//cout<<"Saved Cali event "<<n_saved_cali<<"/"<<k<<" "<<g_cali->GetName()<<endl;
 				n_saved_cali++;
+				c1->Clear();
 			}
 			else{
 				g_data = new TGraph(1023,t,chn1);
@@ -467,6 +468,7 @@ void decode(TString filename) {
 				if (g_hits) g_hits->SetName(TString::Format("g_data_hits_%03d",n_saved_data));
 				//cout<<"Saved data event "<<n_saved_data<<"/"<<k<<" "<<g_data->GetName()<<endl;
 				n_saved_data++;
+				c1->Clear();
 			}
 			g_trig->SetTitle(TString::Format("Trig Event %06d",k));
 			g_trig->Draw("goffAPL");
@@ -475,6 +477,7 @@ void decode(TString filename) {
 			g_trig->GetXaxis()->SetTitle("time");
 			g_trig->GetYaxis()->SetTitle("signal_{ch2} / mV");
 			g_trig->Write();
+			c1->Clear();
 
 			if (g_hits) {
 				g_hits->SetTitle(TString::Format("Hits Event %06d",k));
@@ -484,6 +487,7 @@ void decode(TString filename) {
 				g_hits->GetXaxis()->SetTitle("time");
 				g_hits->GetYaxis()->SetTitle("signal_{ch4} / mV");
 				g_hits->Write();
+				c1->Clear();
 			}
 
 			TString title;
@@ -502,6 +506,7 @@ void decode(TString filename) {
 			if (g_hits)
 				mg->Add(g_hits);
 			mg->Write();
+			c1->Clear();
 			delete mg;
 			g_hits=0;
 			g_trig =0;
@@ -589,7 +594,7 @@ void usage(){
 int main(int argc, char* argv[]){
 	verbose = false;
 	gROOT->SetBatch();
-	TCanvas *c1 = new TCanvas();
+	c1 = new TCanvas();
 	TString infile;
 	TString outfile;
 	delay_data = -2e3;
