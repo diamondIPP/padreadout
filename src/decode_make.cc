@@ -46,6 +46,11 @@ void GetIntegrals(Int_t k,unsigned short sig[],Int_t trigTime,Int_t delay, Doubl
 		return;
 	if (delay == -2e3) delay = 0;
 	Int_t pos = trigTime+delay;
+	if (fixed_readout >= 0){
+		if(verbose)
+			cout<<"Setting fixed readout position: "<<fixed_readout<<endl;
+		pos = fixed_readout;
+	}
 	sampling_point = pos;
 	sampling_time = header.time[pos];
 	//return;
@@ -126,6 +131,7 @@ void SetBranches(){
 	rec->Branch("trigger_time",&trigger_time,"trigger_time/F");
 	rec->Branch("sampling_time",&sampling_time,"sampling_time/F");
 	rec->Branch("sampling_point",&sampling_point,"sampling_point/I");
+    rec->Branch("fixed_readout",&fixed_readout,"fixed_readout/I");
 
 	rec->Branch("fixed_delay_cali",&fixed_delay_cali,"fixed_delay_cali/I");
 	rec->Branch("fixed_delay_data",&fixed_delay_data,"fixed_delay_data/I");
@@ -377,7 +383,7 @@ void decode(TString filename) {
 	TGraph* g_data = 0;
 	TGraph* g_cali = 0;
 	TGraph* g_trig = 0;
-	TGraph* g_Flag = 0;
+	TGraph* g_flag = 0;
 	TGraph* g_hits = 0;
 	TH1F* h_data = new TH1F("h_data","Integral50_{data}",1001,-500.5,500.5);
 	TH1F* h_cali = new TH1F("h_cali","Integral50_{cali}",1001,-500.5,500.5);
@@ -400,7 +406,8 @@ void decode(TString filename) {
 		// decode time
 		read_header();
 		read_waveforms();
-		get_trigger_times();
+		if (get_trigger_times >=0)
+			get_trigger_times();
 		// decode amplitudes in mV
 		update_averages();
 
@@ -427,7 +434,8 @@ void decode(TString filename) {
 				chn4[i] = (Double_t) ((waveform.chn4[i]) / 65535. - 0.5) * 1000;
 				t[i] = (Double_t) header.time[i];
 			}
-			g_trig = new TGraph(1023,t,chn2);
+			if (n_wf>2)
+				g_trig = new TGraph(1023,t,chn2);
 			if (n_wf>3)
 				g_hits = new TGraph(1023,t,chn4);
 
@@ -444,7 +452,8 @@ void decode(TString filename) {
 				if (g_cali->GetYaxis())
 					g_cali->GetYaxis()->SetTitle("signal / mV");
 				g_cali->Write();
-				g_trig->SetName(TString::Format("g_cali_trig_%d03",n_saved_cali));
+				if (g_trig)
+					g_trig->SetName(TString::Format("g_cali_trig_%d03",n_saved_cali));
 				if (g_hits)
 					g_hits->SetName(TString::Format("g_cali_hits_%d03",n_saved_cali));
 				//cout<<"Saved Cali event "<<n_saved_cali<<"/"<<k<<" "<<g_cali->GetName()<<endl;
@@ -464,20 +473,23 @@ void decode(TString filename) {
 				if (g_data->GetYaxis())
 					g_data->GetYaxis()->SetTitle("signal_{ch1} / mV");
 				g_data->Write();
+                if (g_trig)
 				g_trig->SetName(TString::Format("g_data_trig_%03d",n_saved_data));
 				if (g_hits) g_hits->SetName(TString::Format("g_data_hits_%03d",n_saved_data));
 				//cout<<"Saved data event "<<n_saved_data<<"/"<<k<<" "<<g_data->GetName()<<endl;
 				n_saved_data++;
 				c1->Clear();
 			}
-			g_trig->SetTitle(TString::Format("Trig Event %06d",k));
-			g_trig->Draw("goffAPL");
-			g_trig->SetLineColor(kBlue);
-			g_trig->SetLineWidth(3);
-			g_trig->GetXaxis()->SetTitle("time");
-			g_trig->GetYaxis()->SetTitle("signal_{ch2} / mV");
-			g_trig->Write();
-			c1->Clear();
+			if(g_trig){
+				g_trig->SetTitle(TString::Format("Trig Event %06d",k));
+				g_trig->Draw("goffAPL");
+				g_trig->SetLineColor(kBlue);
+				g_trig->SetLineWidth(3);
+				g_trig->GetXaxis()->SetTitle("time");
+				g_trig->GetYaxis()->SetTitle("signal_{ch2} / mV");
+				g_trig->Write();
+				c1->Clear();
+			}
 
 			if (g_hits) {
 				g_hits->SetTitle(TString::Format("Hits Event %06d",k));
@@ -490,24 +502,26 @@ void decode(TString filename) {
 				c1->Clear();
 			}
 
-			TString title;
-			if (calibflag)
-				title = TString::Format("mgOverview_calib_%06d",n_saved_cali);
-			else
-				title = TString::Format("mgOverview_data_%06d",n_saved_data);
+            if (fixed_readout>=0){
+                TString title;
+                if (calibflag)
+                    title = TString::Format("mgOverview_calib_%06d",n_saved_cali);
+                else
+                    title = TString::Format("mgOverview_data_%06d",n_saved_data);
 
-			TMultiGraph* mg = new TMultiGraph(title,title);
-			if (g_data)
-				mg->Add(g_data);
-			if (g_cali)
-				mg->Add(g_cali);
-			if (g_trig)
-				mg->Add(g_trig);
-			if (g_hits)
-				mg->Add(g_hits);
-			mg->Write();
-			c1->Clear();
-			delete mg;
+                TMultiGraph* mg = new TMultiGraph(title,title);
+                if (g_data)
+                    mg->Add(g_data);
+                if (g_cali)
+                    mg->Add(g_cali);
+                if (g_trig)
+                    mg->Add(g_trig);
+                if (g_hits)
+                    mg->Add(g_hits);
+                mg->Write();
+                c1->Clear();
+                delete mg;
+            }
 			g_hits=0;
 			g_trig =0;
 			g_data = 0;
@@ -601,12 +615,13 @@ int main(int argc, char* argv[]){
 	delay_cali = -2e3;
 	// Parse options
 	char ch;
-	while ((ch = getopt(argc, argv, "d:c:i:h")) != -1 ) {
+	while ((ch = getopt(argc, argv, "d:c:i:f:h")) != -1 ) {
 		switch (ch) {
 		case 'i': infile  = TString(optarg);  break;
 		case 'h': usage(); break;
 		case 'd': cout<<"Analyse: \""<<optarg<<"\""<<endl;delay_data = atoi(optarg);cout<<"Set delay_data to "<<delay_data<<endl;break;
 		case 'c': cout<<"Analyse: \""<<optarg<<"\""<<endl;delay_cali = atoi(optarg);cout<<"Set delay_cali to "<<delay_cali<<endl;break;
+		case 'f': cout<<"Analyse: \""<<optarg<<"\""<<endl;fixed_readout = atoi(optarg);cout<<"Set fixed_redaout to "<<fixed_readout<<endl;break;
 		default:
 			cerr << "*** Error: unknown option " << optarg << std::endl;
 			usage();
@@ -617,6 +632,18 @@ int main(int argc, char* argv[]){
 	if( argc<1 ) {
 		usage();
 	}
+    if (infile.Contains("S129")){
+        TString infile3 = infile(infile.Last('/')+1,infile.Length());
+        cout <<infile3<<endl;
+        TString infile2 = infile3(5,3);
+        cout<<"INFILE2: \""<<infile2<<"\""<<endl;
+        int fixed = infile2.Atoi();
+        cout<<"FIXED: "<<fixed<<endl;
+        if (0<fixed && fixed <1024)
+            fixed_readout = fixed;
+    }
+
+
 
 	//cout<<"calling decode on file " << infile << ".dat" << std::endl;
 	decode(infile);
