@@ -68,6 +68,7 @@ Int_t n_delay_cali = 0;
 Int_t n_delay_data = 0;
 Int_t fixed_delay_data = -1;
 Int_t fixed_delay_cali = -1;
+Int_t fixed_readout = -1;
 Int_t n_trig = 0;
 Int_t trig_mean;
 Int_t trig_mean2;
