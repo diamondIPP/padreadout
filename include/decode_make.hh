@@ -34,8 +34,8 @@ bool verbose;
 HeaderStart_t header_start;
 Header_t header;
 Header5_t header5;
-Waveform_t waveform;
-//SingleWaveform_t waveform[4];
+//Waveform_t waveform;
+SingleWaveform_t waveform[4];
 TTree *rec;
 FILE *f;
 TFile *outfile;
@@ -99,4 +99,4 @@ bool check_waveform_headers();
 void update_averages();
 void get_trigger_times();
 
-//TimeBins_t times[4];
+TimeBins_t timebins[4];
