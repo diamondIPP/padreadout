@@ -137,18 +137,17 @@ void SetBranches(){
 	rec->Branch("fixed_delay_data",&fixed_delay_data,"fixed_delay_data/I");
 }
 
-void find_trigger_delay(FILE *f,TFile* rootfile){
+void find_trigger_delay(){
+	TFile* rootfile = outfile;
 	cout <<"Find Trigger delays"<<endl;
 	TriggerDelay dt_data(128,"DATA");
 	TriggerDelay dt_cali(16,"CALI");
 	TriggerDelay dt_trig(128,"TRIG");
 	Int_t delay_data_old = delay_data;
 	Int_t delay_cali_old = delay_cali;
-	//	delay_cali = -2e3;
-	//	delay_data = -2e3;
-	for (n=0 ; fread(&header, sizeof(header), 1, f) > 0; n++) {
-		read_header();
-		read_waveforms();
+	for (n=-1 ;true && n <10; n++) {
+		if (!get_next_event())
+					break;
 		if (n%100==0)
 			cout<<"\r "<<n<<" "<<dt_data.GetEvents()<<"\t"<<dt_cali.GetEvents()<<" "<<n_delay_cali<<" "<<n_delay_data<<" "<<" "<<avrg_chn2<<" "<<flush;
 		get_trigger_times();
@@ -305,15 +304,57 @@ void update_averages(){
 	calibflag = (n_min>10 && n_wf > 2);
 }
 
-
-void read_header(){
-
+bool is_time_header(){
+	char hdr[] = {'T','I','M','E'};
+	if (memcmp(header_start.event_header,hdr,4)!=0){
+//		cout << "time header  " << header_start.event_header << std::endl;
+		return false;
+	}
+	return true;
+}
+bool check_header_start(){
 	char hdr[] = {'E','H','D','R'};
-	if( n == 0 && verbose)
-		cout << "event header  " << header.event_header << std::endl;
-	if (memcmp(header.event_header,hdr,4)!=0)
-		cout << "event header  " << header.event_header << std::endl;
-	// get the year/month/date
+	if (memcmp(header_start.event_header,hdr,4)!=0){
+		cout << "event header  " << header_start.event_header << std::endl;
+		return false;
+	}
+	return true;
+}
+
+bool read_header(){
+	if (drs_version == 5)
+		return read_header5();
+	else
+		return read_header4();
+}
+bool read_header5(){
+		year = header5.year;
+		month = header5.month;
+		day = header5.day;
+		time_stamp = header5.hour*3600+header5.minute*60+header5.second+header5.millisecond/1000.;
+		tm_time.tm_hour = header5.hour;
+		tm_time.tm_min  = header5.minute;
+		tm_time.tm_sec  = header5.second;
+		tm_time.tm_year = header5.year;
+		tm_time.tm_mon  = header5.month;
+		tm_time.tm_mday = header5.day;
+		timestamp = int(mktime(&tm_time))+header5.millisecond/1000.;
+		if (n == 0 && verbose) cout << "millisecond " << header5.millisecond << std::endl;
+		if (n == 0 && verbose) cout << "waveform size : " <<    sizeof(waveform)/4*n_channels << endl;
+		if (n == 0 && verbose){
+			cout <<"\nserial: "<<header5.serial_number;
+			cout <<"\nreserv: "<<header5.reserved1;
+		}
+		// print this info for every 10kth event
+		if (n%10000 == 0) cout << "\t year "<< year << ": month " << month << ": day " << day <<
+				" : hour " << std::setfill(' ')<<std::setw(2)<<header5.hour <<
+				" : minute " <<std::setfill(' ')<<std::setw(2)<< header5.minute <<
+				" \t "<<timestamp<< " "<<std::flush;;
+		return true;
+}
+
+
+bool read_header4(){	// get the year/month/date
 	year = header.year;
 	month = header.month;
 	day = header.day;
@@ -328,7 +369,6 @@ void read_header(){
 	if (n == 0 && verbose) cout << "millisecond " << header.millisecond << std::endl;
 	if (n == 0 && verbose) cout << "waveform size : " <<    sizeof(waveform)/4*n_channels << endl;
 	if (n == 0 && verbose){
-		cout <<  "header: "<<header.event_header;
 		cout <<"\nserial: "<<header.serial_number;
 		cout <<"\nreserv: "<<header.reserved1;
 	}
@@ -337,16 +377,100 @@ void read_header(){
 			" : hour " << std::setfill(' ')<<std::setw(2)<<header.hour <<
 			" : minute " <<std::setfill(' ')<<std::setw(2)<< header.minute <<
 			" \t "<<timestamp<< " "<<std::flush;;
+	return true;
 }
 
-void read_waveforms(){
+bool check_single_waveform_header(char *waveform_header){
+	bool retval = memcmp(ch_header,waveform.chn1_header,3) == 0;
+	if (verbose && false){
+		cout<<"wf_header \"";
+		for (int i=0;i<4;i++)
+			cout<<waveform_header[i];
+		cout<<"\" "<<retval<<endl;
+	}
+	return retval;
+}
+
+
+bool check_waveform_headers(){
+	bool check_ch0 = check_single_waveform_header(waveform.chn1_header) || n_wf < 1;
+	bool check_ch1 = check_single_waveform_header(waveform.chn2_header) || n_wf < 2;
+	bool check_ch2 = check_single_waveform_header(waveform.chn3_header) && n_wf < 3;
+	bool check_ch3 = check_single_waveform_header(waveform.chn4_header) || n_wf < 4;
+	bool retval = check_ch0 && check_ch1 && check_ch2 && check_ch3;
+	if (verbose)
+		cout<<"waveform_check: "<<n_wf<<" Wfs with "<<check_ch0<<" "<<check_ch1<<" "<<check_ch2<<" "<<check_ch3<<" => "<<retval<<endl;
+	return retval;
+}
+bool read_waveforms(){
 	if (n%1000 == 0) cout << "\r"<<n<<"/"<<n_events << std::flush;
 	// read the waveform
 	Int_t s = sizeof(SingleWaveform_t);
 	//	if (verbose && n == 1)
+	long length = s*n_wf;
+	cout<<"read waveform: "<<length<<endl;
 	float sizeofwaveform = fread(&waveform, n_wf*s, 1, f);
 	if (verbose && n == 1)
 		cout << "sizeofwaveform: " << sizeofwaveform << std::endl;
+	return check_waveform_headers();
+}
+
+bool get_next_event(){
+	cout<<"\nGet Next Event"<<endl;
+	int header_length;
+	if (drs_version == 5)
+		header_length = sizeof(header5);
+	else
+		header_length = sizeof(header);
+	while (true){
+//		cout<<"continue search"<<endl;
+		cout << "read header start  "<<sizeof(header_start)<<endl;
+		if (fread(&header_start, sizeof(header_start), 1, f) <= 0)
+			return false;
+		bool time_header = is_time_header();
+		if (time_header)
+			cout<<"FOUND TIME HEADER\n\n"<<endl;
+		if (!check_header_start()&& !time_header){
+			cout<<"Didn't find header"<<endl;
+			continue;
+		}
+		cout<<"Found header"<<endl;
+		if (time_header){
+			cout <<"read board id "<<sizeof(short)*2<<endl;
+			if (fread(&header5.reserved2, sizeof(short)*2, 1, f) <= 0){
+				cout<<"BREAK time"<<endl;
+				return false;
+			}
+		}
+		else if (drs_version == 5){
+			cout<<"read header5 "<<header_length<<endl;
+			if (fread(&header5, header_length, 1, f) <= 0){
+				cout<<"BREAK5"<<endl;
+				return false;
+			}
+		}
+		else{
+			cout<<"read header4 "<<header_length<<endl;
+			if (fread(&header, header_length, 1, f) <= 0){
+				cout<<"BREAK4"<<endl;
+				return false;
+			}
+		}
+		if (!read_header()){
+			cout<<"Could not read header"<<endl;
+			continue;
+		}
+		if (!read_waveforms()){
+			cout<<"Cannot read event"<<endl;
+//			continue;
+		}
+		if (!time_header){
+			cout<<"Found event"<<endl;
+			return true;
+		}
+		else
+			cout<<"Time header -> search for event header"<<endl;
+	}
 }
 
 void decode(TString filename) {
@@ -370,7 +494,7 @@ void decode(TString filename) {
 	filename = filename.ReplaceAll(".dat","");
 	unsigned long size = st.st_size;
 	//open the root file
-	TFile *outfile = new TFile(filename+".root", "RECREATE");
+	outfile = new TFile(filename+".root", "RECREATE");
 	map<string,string> results;
 
 
@@ -387,25 +511,40 @@ void decode(TString filename) {
 	TGraph* g_hits = 0;
 	TH1F* h_data = new TH1F("h_data","Integral50_{data}",1001,-500.5,500.5);
 	TH1F* h_cali = new TH1F("h_cali","Integral50_{cali}",1001,-500.5,500.5);
-
-	n_wf = GetNrecordedWaveforms(f);
-	long  event_size =  sizeof(header) + n_wf * sizeof(SingleWaveform_t);
+	drs_version = GetDRS_revision(f);
+	cout<<"DRS4 EvaluationBoard "<<drs_version<<endl;
+	n_wf = GetNrecordedWaveforms(f,drs_version);
+	long  event_size;
+	if (drs_version == 5)
+		event_size =  sizeof(header5) + n_wf * sizeof(SingleWaveform_t);
+	else
+		event_size =  sizeof(header) + n_wf * sizeof(SingleWaveform_t);
 	n_events = size/event_size;
 
 	cout<<"Total Size: "<<size<<" Bytes"<<endl;
 	cout<<"Event Size: "<<event_size<<" Bytes"<<endl;
-	cout<<"N Events:   "<<n_events<<endl;
+	cout<<"N Events:   "<<n_events<<" "<<(float)size/event_size<<endl;
 
-	find_trigger_delay(f,outfile);
+//	find_trigger_delay();//f,outfile);
 	// loop over all events in data file
 	outfile->mkdir("Graphs");
 	outfile->cd("Graphs");
 	rewind(f);
-	for (n=0 ; fread(&header, sizeof(header), 1, f) > 0; n++) {
+	int header_length;
+	if (drs_version == 5)
+		header_length = sizeof(header5);
+	else
+		header_length = sizeof(header);
+	cout<<"START"<<" "<<header_length<<endl;
+	char tt;
+	cin >> tt;
+	for (n=-1 ; true; n++) {
+		if (!get_next_event())
+			break;
 		//  cout << "30" << endl;
 		// decode time
-		read_header();
-		read_waveforms();
+
+
 		if (get_trigger_times >=0)
 			get_trigger_times();
 		// decode amplitudes in mV
@@ -529,7 +668,7 @@ void decode(TString filename) {
 		}
 
 		if (verbose)
-			cout<<n<<" Fill"<<endl;
+			cout<<n<<" Fill: "<<rec->GetEntries()<<endl;
 		rec->Fill();
 	}
 	outfile->cd();
@@ -568,7 +707,8 @@ void decode(TString filename) {
 	f_data2->SetNpx(1000);
 	f_data2->SetLineColor(kGreen);
 	Float_t mp = h_data->GetBinCenter(h_data->GetMaximumBin());
-	if ( abs((mean - mp)/mean - 1) > .3)
+	double value = (mean - mp)/mean - 1;
+	if ( TMath::Abs(value) > .3)
 		mp = mean;
 	h_data->Fit(f_data2,"Q+","",mp-sigma/2.,mp+sigma/2.);
 	cout<<"RUN "<<filename<<":\n\tDATA: "<<f_data->GetParameter(1)<<"\n\tCALI: "<<f_cali->GetParameter(1)<<endl;
@@ -603,6 +743,7 @@ void decode(TString filename) {
 
 void usage(){
 	cout<< "usage:\n ./decode -i <filename> [-d DELAY_DATA] [-c DELAY_CONFIG]" << std::endl;
+	cout<<"\t-f for fixed readout"<<endl;
 }
 
 int main(int argc, char* argv[]){
@@ -615,13 +756,14 @@ int main(int argc, char* argv[]){
 	delay_cali = -2e3;
 	// Parse options
 	char ch;
-	while ((ch = getopt(argc, argv, "d:c:i:f:h")) != -1 ) {
+	while ((ch = getopt(argc, argv, "d:c:i:f:h:v")) != -1 ) {
 		switch (ch) {
 		case 'i': infile  = TString(optarg);  break;
-		case 'h': usage(); break;
+		case 'h': usage(); return 0; break;
 		case 'd': cout<<"Analyse: \""<<optarg<<"\""<<endl;delay_data = atoi(optarg);cout<<"Set delay_data to "<<delay_data<<endl;break;
 		case 'c': cout<<"Analyse: \""<<optarg<<"\""<<endl;delay_cali = atoi(optarg);cout<<"Set delay_cali to "<<delay_cali<<endl;break;
 		case 'f': cout<<"Analyse: \""<<optarg<<"\""<<endl;fixed_readout = atoi(optarg);cout<<"Set fixed_redaout to "<<fixed_readout<<endl;break;
+		case 'v': cout<<"SetVerbose"<<endl;verbose = true;break;
 		default:
 			cerr << "*** Error: unknown option " << optarg << std::endl;
 			usage();

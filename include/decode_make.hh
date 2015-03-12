@@ -20,7 +20,7 @@
 #include "TMultiGraph.h"
 #include "TStopwatch.h"
 #include "MyUtilities.hh"
-
+#include "TMath.h"
 
 using namespace std;
 
@@ -31,10 +31,14 @@ using namespace std;
 
 TCanvas *c1;
 bool verbose;
+HeaderStart_t header_start;
 Header_t header;
+Header5_t header5;
 Waveform_t waveform;
+//SingleWaveform_t waveform[4];
 TTree *rec;
 FILE *f;
+TFile *outfile;
 Int_t year, month, day;
 Double_t  time_stamp;
 Double_t timestamp;
@@ -81,11 +85,18 @@ struct tm tm_time;
 float trigger_time;
 Int_t sampling_point;
 Float_t sampling_time;
-
+int drs_version;
 int n_events;
-
-void read_header();
-void read_waveforms();
+char ch_header[] = {'C','0','0'};
+bool check_header_start();
+bool is_time_header();
+bool get_next_event();
+bool read_header();
+bool read_header4();
+bool read_header5();
+bool read_waveforms();
+bool check_waveform_headers();
 void update_averages();
 void get_trigger_times();
 
+//TimeBins_t times[4];
